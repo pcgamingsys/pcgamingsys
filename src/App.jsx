@@ -121,8 +121,6 @@ export function AppProvider({ children }) {
       repuesto_compra_id: ordenData.repuesto_compra_id ? Number(ordenData.repuesto_compra_id) : null,
       valor_estimado: Number(ordenData.valor_estimado) || 0,
       total_pagar: 0,
-      garantia_incluye: ordenData.garantia_incluye || false,
-      garantia_tiempo: ordenData.garantia_tiempo || '',
       usuario_creador: nombreUsuario || 'Sistema',
       estado: 'Ingresado',
       observaciones: [{ fecha: new Date().toLocaleString('es-CO'), texto: `Orden registrada por ${nombreUsuario || 'Sistema'}.` }]
@@ -138,7 +136,7 @@ export function AppProvider({ children }) {
     return insertada[0];
   };
 
-  const actualizarOrden = async (id, estado, obs, diag, presupuesto, totalPagar, repuestoCompraId = null, remisionAsociada = null, garantiaIncluye = false, garantiaTiempo = '') => {
+  const actualizarOrden = async (id, estado, obs, diag, presupuesto, totalPagar, repuestoCompraId = null, remisionAsociada = null) => {
     const ordenObj = ordenes.find(o => o.id === id);
     if (!ordenObj) return;
 
@@ -153,8 +151,6 @@ export function AppProvider({ children }) {
       valor_estimado: presupuesto !== undefined ? Number(presupuesto) : ordenObj.valor_estimado,
       total_pagar: totalPagar !== undefined ? Number(totalPagar) : (ordenObj.total_pagar || 0),
       repuesto_compra_id: repuestoCompraId !== undefined ? (repuestoCompraId ? Number(repuestoCompraId) : null) : ordenObj.repuesto_compra_id,
-      garantia_incluye: garantiaIncluye !== undefined ? garantiaIncluye : (ordenObj.garantia_incluye || false),
-      garantia_tiempo: garantiaTiempo !== undefined ? garantiaTiempo : (ordenObj.garantia_tiempo || ''),
       observaciones: obsArr,
       ...(remisionAsociada ? { numero_factura_asociada: remisionAsociada } : {})
     };
@@ -188,7 +184,7 @@ export function AppProvider({ children }) {
     }
   };
 
-  const remisionarOrden = async (orden, nombreUsuario, itemCompraSeleccionado = null, garantiaIncluye = false, garantiaTiempo = '') => {
+  const remisionarOrden = async (orden, nombreUsuario, itemCompraSeleccionado = null) => {
     const cliEncontrado = clientes.find(c => c.nombre.toLowerCase() === orden.cliente_nombre.toLowerCase());
     const telCliente = cliEncontrado ? cliEncontrado.telefono : (orden.cliente_telefono || 'N/A');
     
@@ -228,15 +224,13 @@ export function AppProvider({ children }) {
       costo_compra: costoTotalCompraAsociada,
       tipo: 'Servicio Técnico',
       usuario_creador: nombreUsuario || 'Sistema',
-      garantia_incluye: garantiaIncluye,
-      garantia_tiempo: garantiaTiempo,
       items: itemsRemision
     };
 
     const { data: insertada, error } = await supabase.from('facturas').insert([nuevaFac]).select();
     if (!error && insertada) {
       setFacturas(prev => [insertada[0], ...prev]);
-      await actualizarOrden(orden.id, 'Entregado / Remisionado', 'Equipo entregado y remisionado bajo ' + numRemisionGenerado, orden.diagnostico, orden.valor_estimado, totalFinalFac, orden.repuesto_compra_id, numRemisionGenerado, garantiaIncluye, garantiaTiempo);
+      await actualizarOrden(orden.id, 'Entregado / Remisionado', 'Equipo entregado y remisionado bajo ' + numRemisionGenerado, orden.diagnostico, orden.valor_estimado, totalFinalFac, orden.repuesto_compra_id, numRemisionGenerado);
       return insertada[0];
     } else {
       console.error(error);
@@ -245,7 +239,7 @@ export function AppProvider({ children }) {
     }
   };
 
-  const agregarVentaDirecta = async (clienteObj, itemsArray, totalCalculado, costoCompraTotal, nombreUsuario, garantiaIncluye = false, garantiaTiempo = '') => {
+  const agregarVentaDirecta = async (clienteObj, itemsArray, totalCalculado, costoCompraTotal, nombreUsuario) => {
     const nombreCliente = clienteObj ? clienteObj.nombre : 'Cliente Mostrador';
     const telefonoCliente = clienteObj ? (clienteObj.telefono || 'N/A') : 'N/A';
     
@@ -261,8 +255,6 @@ export function AppProvider({ children }) {
       costo_compra: costoCompraTotal || 0,
       tipo: 'Venta de Repuestos',
       usuario_creador: nombreUsuario || 'Sistema',
-      garantia_incluye: garantiaIncluye,
-      garantia_tiempo: garantiaTiempo,
       items: itemsArray
     };
 
@@ -409,16 +401,10 @@ function MainApp() {
     tipo: 'AMBOS'
   });
 
-  // Estados para búsqueda y ordenamiento en Remisiones y Ventas
+  // Estados nuevos para búsqueda y ordenamiento por fecha en Remisiones y Ventas
   const [facturasFiltroInicio, setFacturasFiltroInicio] = useState('');
   const [facturasFiltroFin, setFacturasFiltroFin] = useState('');
   const [facturasOrdenFecha, setFacturasOrdenFecha] = useState('recientes'); // 'recientes' o 'antiguas'
-
-  // Estados nuevos para búsqueda, rango de fechas y ordenamiento en Reparaciones y Estado (Órdenes)
-  const [ordenesBusquedaTexto, setOrdenesBusquedaTexto] = useState('');
-  const [ordenesFiltroInicio, setOrdenesFiltroInicio] = useState('');
-  const [ordenesFiltroFin, setOrdenesFiltroFin] = useState('');
-  const [ordenesOrdenFecha, setOrdenesOrdenFecha] = useState('antiguas'); // 'antiguas' (más antiguo al más actual por defecto o recientes)
 
   const [tipoClienteOpt, setTipoClienteOpt] = useState('EXISTENTE');
   const [busquedaCliente, setBusquedaCliente] = useState('');
@@ -435,12 +421,10 @@ function MainApp() {
     deja_cargador: false,
     deja_bateria: false,
     serie_bateria: '',
-    repuesto_compra_id: '',
-    garantia_incluye: false,
-    garantia_tiempo: ''
+    repuesto_compra_id: ''
   });
 
-  const [editOrdForm, setEditOrdForm] = useState({ estado: '', observacion: '', diagnostico: '', presupuesto: 0, totalPagar: 0, repuestoCompraId: '', garantiaIncluye: false, garantiaTiempo: '' });
+  const [editOrdForm, setEditOrdForm] = useState({ estado: '', observacion: '', diagnostico: '', presupuesto: 0, totalPagar: 0, repuestoCompraId: '' });
   
   const [tipoClienteVentaOpt, setTipoClienteVentaOpt] = useState('EXISTENTE');
   const [busquedaClienteVenta, setBusquedaClienteVenta] = useState('');
@@ -448,8 +432,6 @@ function MainApp() {
   const [formNuevoClienteVenta, setFormNuevoClienteVenta] = useState({ nombre: '', telefono: '', cedula: '', email: '', direccion: '' });
   const [itemsVenta, setItemsVenta] = useState([{ descripcion: '', cantidad: 1, precio: 0 }]);
   const [compraSeleccionadaVentaId, setCompraSeleccionadaVentaId] = useState('');
-  const [ventaGarantiaIncluye, setVentaGarantiaIncluye] = useState(false);
-  const [ventaGarantiaTiempo, setVentaGarantiaTiempo] = useState('');
 
   const [formCompra, setFormCompra] = useState({ proveedor: '', descripcion_producto: '', costo: 0, precio_venta_sugerido: 0 });
   const [mostrarHistorialPortal, setMostrarHistorialPortal] = useState(false);
@@ -480,7 +462,7 @@ function MainApp() {
   const clientesFiltradosVenta = clientes.filter(c => c.nombre.toLowerCase().includes(busquedaClienteVenta.toLowerCase()) || String(c.telefono || '').includes(busquedaClienteVenta));
 
   const enviarWhatsApp = (orden, idConsecutivoStr) => {
-    const msg = `Hola *${orden.cliente_nombre}* 👋\n\nTe saludamos de *${empresa.nombre}*.\n\nTu orden *${idConsecutivoStr}* (*${orden.tipo_equipo} ${orden.marca_modelo}*) se encuentra en estado: *${orden.estado}*.\n\nPuedes consultar el avance, diagnóstico y estado de tu equipo ingresando a nuestra plataforma:\n🔗 https://pcgamingsys.vercel.app/portal\n\nUtiliza tu código único: *${orden.codigo_seguimiento}*`;
+    const msg = `Hola *${orden.cliente_nombre}* 👋\n\nTe saludamos de *${empresa.nombre}*.\n\nTu orden *${idConsecutivoStr}* (*${orden.tipo_equipo} ${orden.marca_modelo}*) se encuentra en estado: *${orden.estado}*.\n\nPuedes consultar el avance, diagnóstico y estado de tu equipo ingresando a nuestra plataforma:\n🔗 https://syspcdoctor.vercel.app/portal\n\nUtiliza tu código único: *${orden.codigo_seguimiento}*`;
     window.open(`https://wa.me/57${orden.cliente_telefono}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
@@ -697,28 +679,6 @@ function MainApp() {
                 )}
               </div>
 
-              <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700 space-y-3">
-                <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-slate-200">
-                  <input 
-                    type="checkbox" 
-                    className="w-4 h-4 accent-indigo-600 rounded" 
-                    checked={formOrden.garantia_incluye} 
-                    onChange={e => setFormOrden({ ...formOrden, garantia_incluye: e.target.checked })} 
-                  />
-                  🛡️ ¿Incluir Garantía en esta orden?
-                </label>
-                {formOrden.garantia_incluye && (
-                  <div>
-                    <input 
-                      placeholder="Tiempo de Garantía (ej. 30 días, 3 meses, 1 año)" 
-                      className="w-full bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-xs text-white" 
-                      value={formOrden.garantia_tiempo} 
-                      onChange={e => setFormOrden({ ...formOrden, garantia_tiempo: e.target.value })} 
-                    />
-                  </div>
-                )}
-              </div>
-
               <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700">
                 <label className="text-xs font-bold text-amber-400 block mb-1">🛒 Asociar Repuesto/Insumo de Compras (Opcional)</label>
                 <select 
@@ -756,7 +716,7 @@ function MainApp() {
                   setTab('ordenes');
                   setClienteSeleccionado(null);
                   setFormNuevoCliente({ nombre: '', telefono: '', cedula: '', email: '', direccion: '' });
-                  setFormOrden({ tipo_equipo: 'PORTATIL', marca_modelo: '', serie: '', fallo_reportado: '', valor_estimado: 0, deja_cargador: false, deja_bateria: false, serie_bateria: '', repuesto_compra_id: '', garantia_incluye: false, garantia_tiempo: '' });
+                  setFormOrden({ tipo_equipo: 'PORTATIL', marca_modelo: '', serie: '', fallo_reportado: '', valor_estimado: 0, deja_cargador: false, deja_bateria: false, serie_bateria: '', repuesto_compra_id: '' });
                 }
               }}
               className="w-full bg-indigo-600 hover:bg-indigo-500 font-bold py-3 rounded-xl text-xs transition shadow-lg shadow-indigo-600/30 text-white"
@@ -770,159 +730,50 @@ function MainApp() {
         {tab === 'ordenes' && (
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
             <h2 className="text-xl font-bold text-white">Seguimiento de Reparaciones</h2>
-            
-            {/* CONTROLES DE BÚSQUEDA, RANGO DE FECHAS Y ORDENAMIENTO EN REPARACIONES */}
-            <div className="bg-slate-800/60 p-4 rounded-xl border border-slate-700/80 flex flex-wrap gap-3 items-end text-xs">
-              <div className="flex-1 min-w-[220px]">
-                <label className="text-slate-400 block mb-1 font-semibold">🔍 Buscar (Nombre, Cédula, Teléfono, Código)</label>
-                <input 
-                  type="text" 
-                  className="w-full bg-slate-800 border border-slate-700 p-2 rounded-xl text-white placeholder-slate-500"
-                  placeholder="Ej. Juan Pérez, Cédula, Celular, TK-..."
-                  value={ordenesBusquedaTexto}
-                  onChange={e => setOrdenesBusquedaTexto(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-slate-400 block mb-1 font-semibold">🔍 Desde la fecha</label>
-                <input 
-                  type="date" 
-                  className="bg-slate-800 border border-slate-700 p-2 rounded-xl text-white"
-                  value={ordenesFiltroInicio}
-                  onChange={e => setOrdenesFiltroInicio(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-slate-400 block mb-1 font-semibold">🔍 Hasta la fecha</label>
-                <input 
-                  type="date" 
-                  className="bg-slate-800 border border-slate-700 p-2 rounded-xl text-white"
-                  value={ordenesFiltroFin}
-                  onChange={e => setOrdenesFiltroFin(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-slate-400 block mb-1 font-semibold">⚡ Ordenar por Fecha</label>
-                <select 
-                  className="bg-slate-800 border border-slate-700 p-2 rounded-xl text-white font-bold"
-                  value={ordenesOrdenFecha}
-                  onChange={e => setOrdenesOrdenFecha(e.target.value)}
-                >
-                  <option value="antiguas">Más antiguo al más actual</option>
-                  <option value="recientes">Más recientes primero</option>
-                </select>
-              </div>
-              {(ordenesBusquedaTexto || ordenesFiltroInicio || ordenesFiltroFin) && (
-                <div>
-                  <button 
-                    onClick={() => { setOrdenesBusquedaTexto(''); setOrdenesFiltroInicio(''); setOrdenesFiltroFin(''); }}
-                    className="bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-2 rounded-xl font-semibold transition"
-                  >
-                    ✕ Limpiar Filtros
-                  </button>
-                </div>
-              )}
-            </div>
-
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-300">
                 <thead className="bg-slate-800 text-slate-400 uppercase">
                   <tr><th className="p-3">ID Registro</th><th className="p-3">Código Cliente</th><th className="p-3">Cliente / Atendió</th><th className="p-3">Equipo & Accesorios</th><th className="p-3">Estado</th><th className="p-3">Presupuesto / Total Pagar</th><th className="p-3 text-right">Acciones</th></tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
-                  {(() => {
-                    const terminoBusq = normalizarBusqueda(ordenesBusquedaTexto);
-
-                    const ordenesFiltradas = ordenes.filter(o => {
-                      // 1. Búsqueda por texto (Nombre, Teléfono, Código de seguimiento o Cédula del cliente)
-                      if (terminoBusq) {
-                        const nombre = normalizarBusqueda(o.cliente_nombre);
-                        const telefono = normalizarBusqueda(o.cliente_telefono);
-                        const codigo = normalizarBusqueda(o.codigo_seguimiento);
-                        
-                        // Buscar cédula en el directorio de clientes
-                        const clienteEncontrado = clientes.find(c => normalizarBusqueda(c.nombre) === normalizarBusqueda(o.cliente_nombre));
-                        const cedula = normalizarBusqueda(clienteEncontrado?.cedula);
-
-                        const coincideTexto = nombre.includes(terminoBusq) ||
-                                              telefono.includes(terminoBusq) ||
-                                              codigo.includes(terminoBusq) ||
-                                              cedula.includes(terminoBusq);
-                        if (!coincideTexto) return false;
-                      }
-
-                      // 2. Filtro por rango de fechas (usando created_at o fecha)
-                      const fechaOrden = o.created_at ? o.created_at.split('T')[0] : (o.fecha || '');
-                      if (fechaOrden) {
-                        if (ordenesFiltroInicio && fechaOrden < ordenesFiltroInicio) return false;
-                        if (ordenesFiltroFin && fechaOrden > ordenesFiltroFin) return false;
-                      }
-
-                      return true;
-                    });
-
-                    // Ordenar según lo que el usuario elija
-                    const ordenesOrdenadas = [...ordenesFiltradas].sort((a, b) => {
-                      if (ordenesOrdenFecha === 'recientes') {
-                        return (b.id - a.id);
-                      } else {
-                        return (a.id - b.id); // Más antiguo al más actual
-                      }
-                    });
-
-                    if (ordenesOrdenadas.length === 0) {
-                      return (
-                        <tr>
-                          <td colSpan="7" className="text-center py-8 text-slate-400">
-                            No se encontraron órdenes con los filtros seleccionados.
-                          </td>
-                        </tr>
-                      );
-                    }
-
-                    return ordenesOrdenadas.map((o) => {
-                      // Obtener índice original fijo para el ID de registro consecutivo
-                      const originalIndex = ordenes.findIndex(item => item.id === o.id);
-                      const idRegistroConsecutivo = `#${1001 + originalIndex}`;
-
-                      return (
-                        <tr key={o.id} className="hover:bg-slate-800/40">
-                          <td className="p-3 font-bold text-indigo-400">{idRegistroConsecutivo}</td>
-                          <td className="p-3 font-mono text-xs text-amber-400 bg-amber-950/30 px-2 py-0.5 rounded border border-amber-800/40">{o.codigo_seguimiento}</td>
-                          <td className="p-3 font-medium text-white">
-                            {o.cliente_nombre}
-                            <span className="block text-[10px] text-slate-500">{o.cliente_telefono}</span>
-                            <span className="block text-[10px] text-indigo-300 font-semibold mt-0.5">👤 Atendió: {o.usuario_creador || 'Sistema'}</span>
-                          </td>
-                          <td className="p-3">
-                            <p className="font-bold text-white">{o.tipo_equipo} {o.marca_modelo}</p>
-                            <p className="text-[10px] text-slate-400">S/N: {o.serie || 'N/A'}</p>
-                            <div className="flex gap-2 mt-1 text-[10px]">
-                              {o.deja_cargador && <span className="bg-indigo-950 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-800">🔌 Cargador</span>}
-                              {o.deja_bateria && <span className="bg-indigo-950 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-800">🔋 Batería {o.serie_bateria ? `(${o.serie_bateria})` : ''}</span>}
-                              {o.garantia_incluye && <span className="bg-emerald-950 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-800">🛡️ Garantía: {o.garantia_tiempo || 'Sí'}</span>}
-                            </div>
-                          </td>
-                          <td className="p-3"><span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-semibold">{o.estado}</span></td>
-                          <td className="p-3 font-bold text-white">
-                            <div className="space-y-0.5">
-                              <span className="text-slate-400 text-[11px] block">Presupuesto: {o.valor_estimado ? `$ ${Number(o.valor_estimado).toLocaleString('es-CO')}` : '-'}</span>
-                              <span className="text-emerald-400 text-[11px] block">Total Pagar: {o.total_pagar ? `$ ${Number(o.total_pagar).toLocaleString('es-CO')}` : '-'}</span>
-                            </div>
-                            {o.numero_factura_asociada && (
-                              <span className="block text-[11px] text-indigo-400 font-mono mt-1">Remisión: {o.numero_factura_asociada}</span>
-                            )}
-                          </td>
-                          <td className="p-3 text-right space-x-1">
-                            {permisos.editar_diagnostico && <button onClick={() => { setModalEditOrden(o); setEditOrdForm({ estado: o.estado, observacion: '', diagnostico: o.diagnostico || '', presupuesto: o.valor_estimado || 0, totalPagar: o.total_pagar || 0, repuestoCompraId: o.repuesto_compra_id || '', garantiaIncluye: o.garantia_incluye || false, garantiaTiempo: o.garantia_tiempo || '' }); }} className="bg-indigo-600 text-white px-2 py-1 rounded text-[11px]">✏️ Diagnóstico</button>}
-                            <button onClick={() => enviarWhatsApp(o, idRegistroConsecutivo)} className="bg-emerald-600 text-white px-2 py-1 rounded text-[11px]">💬 WhatsApp</button>
-                            <button onClick={() => setDocumentoImprimir({ tipo: 'ORDEN', data: o, idConsecutivo: idRegistroConsecutivo })} className="bg-slate-800 text-white px-2 py-1 rounded text-[11px]">🖨️ PDF</button>
-                            {o.estado === 'Reparado / Listo' && permisos.facturar && <button onClick={() => setModalRemisionarOrden({ orden: o, compraId: o.repuesto_compra_id || '', garantiaIncluye: o.garantia_incluye || false, garantiaTiempo: o.garantia_tiempo || '' })} className="bg-emerald-500 text-white px-2 py-1 rounded text-[11px] font-bold">📄 Remisionar</button>}
-                          </td>
-                        </tr>
-                      );
-                    });
-                  })()}
+                  {ordenes.map((o, index) => {
+                    const idRegistroConsecutivo = `#${1001 + (ordenes.length - 1 - index)}`;
+                    return (
+                      <tr key={o.id} className="hover:bg-slate-800/40">
+                        <td className="p-3 font-bold text-indigo-400">{idRegistroConsecutivo}</td>
+                        <td className="p-3 font-mono text-xs text-amber-400 bg-amber-950/30 px-2 py-0.5 rounded border border-amber-800/40">{o.codigo_seguimiento}</td>
+                        <td className="p-3 font-medium text-white">
+                          {o.cliente_nombre}
+                          <span className="block text-[10px] text-slate-500">{o.cliente_telefono}</span>
+                          <span className="block text-[10px] text-indigo-300 font-semibold mt-0.5">👤 Atendió: {o.usuario_creador || 'Sistema'}</span>
+                        </td>
+                        <td className="p-3">
+                          <p className="font-bold text-white">{o.tipo_equipo} {o.marca_modelo}</p>
+                          <p className="text-[10px] text-slate-400">S/N: {o.serie || 'N/A'}</p>
+                          <div className="flex gap-2 mt-1 text-[10px]">
+                            {o.deja_cargador && <span className="bg-indigo-950 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-800">🔌 Cargador</span>}
+                            {o.deja_bateria && <span className="bg-indigo-950 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-800">🔋 Batería {o.serie_bateria ? `(${o.serie_bateria})` : ''}</span>}
+                          </div>
+                        </td>
+                        <td className="p-3"><span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-semibold">{o.estado}</span></td>
+                        <td className="p-3 font-bold text-white">
+                          <div className="space-y-0.5">
+                            <span className="text-slate-400 text-[11px] block">Presupuesto: {o.valor_estimado ? `$ ${Number(o.valor_estimado).toLocaleString('es-CO')}` : '-'}</span>
+                            <span className="text-emerald-400 text-[11px] block">Total Pagar: {o.total_pagar ? `$ ${Number(o.total_pagar).toLocaleString('es-CO')}` : '-'}</span>
+                          </div>
+                          {o.numero_factura_asociada && (
+                            <span className="block text-[11px] text-indigo-400 font-mono mt-1">Remisión: {o.numero_factura_asociada}</span>
+                          )}
+                        </td>
+                        <td className="p-3 text-right space-x-1">
+                          {permisos.editar_diagnostico && <button onClick={() => { setModalEditOrden(o); setEditOrdForm({ estado: o.estado, observacion: '', diagnostico: o.diagnostico || '', presupuesto: o.valor_estimado || 0, totalPagar: o.total_pagar || 0, repuestoCompraId: o.repuesto_compra_id || '' }); }} className="bg-indigo-600 text-white px-2 py-1 rounded text-[11px]">✏️ Diagnóstico</button>}
+                          <button onClick={() => enviarWhatsApp(o, idRegistroConsecutivo)} className="bg-emerald-600 text-white px-2 py-1 rounded text-[11px]">💬 WhatsApp</button>
+                          <button onClick={() => setDocumentoImprimir({ tipo: 'ORDEN', data: o, idConsecutivo: idRegistroConsecutivo })} className="bg-slate-800 text-white px-2 py-1 rounded text-[11px]">🖨️ PDF</button>
+                          {o.estado === 'Reparado / Listo' && permisos.facturar && <button onClick={() => setModalRemisionarOrden({ orden: o, compraId: o.repuesto_compra_id || '' })} className="bg-emerald-500 text-white px-2 py-1 rounded text-[11px] font-bold">📄 Remisionar</button>}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1018,7 +869,7 @@ function MainApp() {
                   {ocultarUtilidad ? '🔒 Utilidad Oculta' : '👁️ Ocultar Utilidad'}
                 </button>
                 <button onClick={() => setModalReporteExcel(true)} className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-xl text-xs font-bold transition">📊 Descargar Reporte Excel</button>
-                <button onClick={() => { setModalVenta(true); setTipoClienteVentaOpt('EXISTENTE'); setClienteVentaSeleccionado(null); setCompraSeleccionadaVentaId(''); setVentaGarantiaIncluye(false); setVentaGarantiaTiempo(''); }} className="bg-emerald-600 text-white px-3 py-2 rounded-xl text-xs font-bold">+ Venta Directa</button>
+                <button onClick={() => { setModalVenta(true); setTipoClienteVentaOpt('EXISTENTE'); setClienteVentaSeleccionado(null); setCompraSeleccionadaVentaId(''); }} className="bg-emerald-600 text-white px-3 py-2 rounded-xl text-xs font-bold">+ Venta Directa</button>
               </div>
             </div>
 
@@ -1079,13 +930,14 @@ function MainApp() {
                 </thead>
                 <tbody className="divide-y divide-slate-800">
                   {(() => {
+                    // Filtrar por rango de fechas si están definidas
                     const facturasFiltradas = facturas.filter(f => {
-                      const fechaF = f.fecha; 
-                      if (facturasFiltroInicio && fechaF < facturasFiltroInicio) return false;
-                      if (facturasFiltroFin && fechaF > facturasFiltroFin) return false;
+                      if (facturasFiltroInicio && f.fecha < facturasFiltroInicio) return false;
+                      if (facturasFiltroFin && f.fecha > facturasFiltroFin) return false;
                       return true;
                     });
 
+                    // Ordenar según la selección del usuario
                     const facturasOrdenadas = [...facturasFiltradas].sort((a, b) => {
                       if (facturasOrdenFecha === 'recientes') {
                         return new Date(b.fecha) - new Date(a.fecha) || b.id - a.id;
@@ -1203,9 +1055,6 @@ function MainApp() {
                 </div>
                 <p><strong className="text-white">Equipo:</strong> {clienteSeleccionado.tipo_equipo} {clienteSeleccionado.marca_modelo} (S/N: {clienteSeleccionado.serie || 'N/A'})</p>
                 <p className="text-slate-300"><strong>Accesorios:</strong> {clienteSeleccionado.deja_cargador ? '🔌 Cargador ' : ''} {clienteSeleccionado.deja_bateria ? `🔋 Batería (${clienteSeleccionado.serie_bateria || 'S/N'})` : ''} {!clienteSeleccionado.deja_cargador && !clienteSeleccionado.deja_bateria ? 'Ninguno' : ''}</p>
-                {clienteSeleccionado.garantia_incluye && (
-                  <p className="text-emerald-400"><strong>🛡️ Garantía:</strong> {clienteSeleccionado.garantia_tiempo || 'Incluida'}</p>
-                )}
                 <p><strong className="text-white">Fallo Reportado:</strong> {clienteSeleccionado.fallo_reportado || clienteSeleccionado.falla_reportado}</p>
                 <p><strong className="text-white">Diagnóstico Técnico:</strong> {clienteSeleccionado.diagnostico || 'Equipo en proceso de revisión.'}</p>
                 
@@ -1418,28 +1267,6 @@ function MainApp() {
               <textarea className="w-full bg-slate-800 p-2 rounded-xl text-xs text-white" rows={2} value={editOrdForm.diagnostico} onChange={e => setEditOrdForm({ ...editOrdForm, diagnostico: e.target.value })} placeholder="Diagnóstico técnico..." />
             </div>
 
-            <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700 space-y-2">
-              <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-slate-200">
-                <input 
-                  type="checkbox" 
-                  className="w-4 h-4 accent-indigo-600 rounded" 
-                  checked={editOrdForm.garantiaIncluye} 
-                  onChange={e => setEditOrdForm({ ...editOrdForm, garantiaIncluye: e.target.checked })} 
-                />
-                🛡️ ¿Incluir / Actualizar Garantía?
-              </label>
-              {editOrdForm.garantiaIncluye && (
-                <div>
-                  <input 
-                    placeholder="Tiempo de Garantía (ej. 30 días, 3 meses, 1 año)" 
-                    className="w-full bg-slate-800 border border-slate-700 p-2 rounded-xl text-xs text-white" 
-                    value={editOrdForm.garantiaTiempo} 
-                    onChange={e => setEditOrdForm({ ...editOrdForm, garantiaTiempo: e.target.value })} 
-                  />
-                </div>
-              )}
-            </div>
-
             <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700">
               <label className="text-xs font-bold text-amber-400 block mb-1">🛒 Asociar o Cambiar Repuesto de Compras</label>
               <select 
@@ -1473,7 +1300,7 @@ function MainApp() {
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setModalEditOrden(null)} className="text-xs text-slate-400 px-3">Cancelar</button>
               <button onClick={async () => { 
-                await actualizarOrden(modalEditOrden.id, editOrdForm.estado, editOrdForm.observacion, editOrdForm.diagnostico, editOrdForm.presupuesto, editOrdForm.totalPagar, editOrdForm.repuestoCompraId, null, editOrdForm.garantiaIncluye, editOrdForm.garantiaTiempo); 
+                await actualizarOrden(modalEditOrden.id, editOrdForm.estado, editOrdForm.observacion, editOrdForm.diagnostico, editOrdForm.presupuesto, editOrdForm.totalPagar, editOrdForm.repuestoCompraId); 
                 setModalEditOrden(null); 
               }} className="bg-indigo-600 text-white px-4 py-1.5 rounded-xl text-xs font-bold">Guardar Cambios</button>
             </div>
@@ -1518,7 +1345,6 @@ function MainApp() {
                     <p className="font-bold text-white">Código: {o.codigo_seguimiento} | Estado: <span className="text-amber-400">{o.estado}</span></p>
                     <p className="text-slate-300">Equipo: {o.tipo_equipo} {o.marca_modelo} (S/N: {o.serie || 'N/A'})</p>
                     <p className="text-slate-400">Accesorios: {o.deja_cargador ? '🔌 Cargador ' : ''} {o.deja_bateria ? `🔋 Batería (${o.serie_bateria || 'S/N'})` : ''}</p>
-                    {o.garantia_incluye && <p className="text-emerald-400">Garantía: {o.garantia_tiempo || 'Sí'}</p>}
                     <p className="text-slate-400">Fallo: {o.fallo_reportado || o.falla_reportado}</p>
                     <p className="text-slate-400">Diagnóstico: {o.diagnostico || 'En proceso'}</p>
                   </div>
@@ -1611,28 +1437,6 @@ function MainApp() {
               </select>
             </div>
 
-            <div className="space-y-2 pt-2 bg-slate-800/50 p-3 rounded-xl border border-slate-800">
-              <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-slate-200">
-                <input 
-                  type="checkbox" 
-                  className="w-4 h-4 accent-indigo-600 rounded" 
-                  checked={ventaGarantiaIncluye} 
-                  onChange={e => setVentaGarantiaIncluye(e.target.checked)} 
-                />
-                🛡️ ¿Incluir Garantía en esta venta?
-              </label>
-              {ventaGarantiaIncluye && (
-                <div>
-                  <input 
-                    placeholder="Tiempo de Garantía (ej. 30 días, 3 meses, 1 año)" 
-                    className="w-full bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-xs text-white" 
-                    value={ventaGarantiaTiempo} 
-                    onChange={e => setVentaGarantiaTiempo(e.target.value)} 
-                  />
-                </div>
-              )}
-            </div>
-
             <div className="space-y-2 pt-2">
               <label className="text-xs font-bold text-slate-400 uppercase">Artículos / Ítems en Factura</label>
               {itemsVenta.map((it, idx) => (
@@ -1671,7 +1475,7 @@ function MainApp() {
                 }
                 
                 const nombreUsrActual = usuarioSesion ? usuarioSesion.nombre : 'Admin';
-                const fac = await agregarVentaDirecta(clienteFinalObj, itemsVenta, total, costoCompraTotal, nombreUsrActual, ventaGarantiaIncluye, ventaGarantiaTiempo);
+                const fac = await agregarVentaDirecta(clienteFinalObj, itemsVenta, total, costoCompraTotal, nombreUsrActual);
                 setModalVenta(false);
                 if(fac) {
                   alert('¡Remisión creada con éxito!');
@@ -1701,28 +1505,7 @@ function MainApp() {
                   <option key={c.id} value={c.id}>{c.descripcion_producto} (Venta sugerida: ${c.precio_venta_sugerido})</option>
                 ))}
               </select>
-            </div>
-
-            <div className="space-y-2 pt-2 bg-slate-800/50 p-3 rounded-xl border border-slate-800">
-              <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-slate-200">
-                <input 
-                  type="checkbox" 
-                  className="w-4 h-4 accent-indigo-600 rounded" 
-                  checked={modalRemisionarOrden.garantiaIncluye} 
-                  onChange={e => setModalRemisionarOrden({ ...modalRemisionarOrden, garantiaIncluye: e.target.checked })} 
-                />
-                🛡️ ¿Incluir / Actualizar Garantía en esta remisión?
-              </label>
-              {modalRemisionarOrden.garantiaIncluye && (
-                <div>
-                  <input 
-                    placeholder="Tiempo de Garantía (ej. 30 días, 3 meses, 1 año)" 
-                    className="w-full bg-slate-800 border border-slate-700 p-2.5 rounded-xl text-xs text-white" 
-                    value={modalRemisionarOrden.garantiaTiempo} 
-                    onChange={e => setModalRemisionarOrden({ ...modalRemisionarOrden, garantiaTiempo: e.target.value })} 
-                  />
-                </div>
-              )}
+              <p className="text-[11px] text-slate-500">Nota: El producto seleccionado se sumará al total de la remisión del cliente y su costo se restará en informes internos para calcular tu utilidad real.</p>
             </div>
 
             <div className="flex justify-end gap-2 pt-3">
@@ -1734,7 +1517,7 @@ function MainApp() {
                   itemCompraObj = compras.find(c => c.id.toString() === modalRemisionarOrden.compraId.toString());
                 }
 
-                const fac = await remisionarOrden(modalRemisionarOrden.orden, nombreUsrActual, itemCompraObj, modalRemisionarOrden.garantiaIncluye, modalRemisionarOrden.garantiaTiempo);
+                const fac = await remisionarOrden(modalRemisionarOrden.orden, nombreUsrActual, itemCompraObj);
                 setModalRemisionarOrden(null);
                 if(fac){
                   alert('¡Remisión Generada Correctamente!');
@@ -1832,9 +1615,6 @@ function MainApp() {
             <p className="text-xs text-slate-300"><strong>Teléfono:</strong> {facturaSeleccionada.cliente_telefono || 'N/A'}</p>
             <p className="text-xs text-slate-300"><strong>Vendedor:</strong> <span className="text-indigo-300 font-semibold">{facturaSeleccionada.usuario_creador || 'Sistema'}</span></p>
             <p className="text-xs text-slate-300"><strong>Tipo Operación:</strong> {facturaSeleccionada.tipo}</p>
-            {facturaSeleccionada.garantia_incluye && (
-              <p className="text-xs text-emerald-400"><strong>🛡️ Garantía:</strong> {facturaSeleccionada.garantia_tiempo || 'Sí'}</p>
-            )}
 
             <div className="border border-slate-800 rounded-xl overflow-hidden max-h-40 overflow-y-auto">
               <table className="w-full text-left text-xs text-slate-300">
@@ -1867,8 +1647,8 @@ function MainApp() {
 
       {documentoImprimir && (
         <div className="fixed inset-0 bg-slate-950/90 flex items-center justify-center p-4 z-50">
-          <div className="bg-white text-slate-900 w-full max-w-xl p-5 rounded-2xl space-y-2 shadow-2xl h-[70vh] max-h-[85vh] overflow-y-auto flex flex-col justify-between border-b-2 border-dashed border-slate-400">
-            <div id="seccion-impresion" className="space-y-2 text-[15px]">
+          <div className="bg-white text-slate-900 w-full max-w-xl p-5 rounded-2xl space-y-2 shadow-2xl h-[50vh] max-h-[50vh] overflow-y-auto flex flex-col justify-between border-b-2 border-dashed border-slate-400">
+            <div id="seccion-impresion" className="space-y-2 text-[17px]">
               
               <div className="flex items-center justify-between border-b pb-1 gap-2">
                 <div className="flex items-center gap-2">
@@ -1886,9 +1666,9 @@ function MainApp() {
               </div>
 
               {documentoImprimir.tipo === 'ORDEN' && (
-                <div className="space-y-1.5 text-sm">
+                <div className="space-y-1.5 text-base">
                   {documentoImprimir.idConsecutivo && (
-                    <p className="text-base"><strong>N° Registro:</strong> <span className="font-black text-indigo-700">{documentoImprimir.idConsecutivo}</span></p>
+                    <p className="text-lg"><strong>N° Registro:</strong> <span className="font-black text-indigo-700">{documentoImprimir.idConsecutivo}</span></p>
                   )}
                   <div className="grid grid-cols-2 gap-1">
                     <p><strong>Cliente:</strong> {documentoImprimir.data.cliente_nombre}</p>
@@ -1908,15 +1688,15 @@ function MainApp() {
                       <p><strong>Presupuesto Est.:</strong> $ {Number(documentoImprimir.data.valor_estimado).toLocaleString('es-CO')}</p>
                     )}
                     {Number(documentoImprimir.data.total_pagar) > 0 && (
-                      <p className="font-bold text-emerald-700 text-base"><strong>Total a Pagar:</strong> $ {Number(documentoImprimir.data.total_pagar).toLocaleString('es-CO')}</p>
+                      <p className="font-bold text-emerald-700 text-lg"><strong>Total a Pagar:</strong> $ {Number(documentoImprimir.data.total_pagar).toLocaleString('es-CO')}</p>
                     )}
                   </div>
                 </div>
               )}
 
               {documentoImprimir.tipo === 'FACTURA' && (
-                <div className="space-y-1.5 text-sm">
-                  <div className="flex justify-between text-base">
+                <div className="space-y-1.5 text-base">
+                  <div className="flex justify-between text-lg">
                     <p><strong>Remisión N°:</strong> <span className="font-black text-indigo-700">{documentoImprimir.data.numero_factura}</span></p>
                     <p><strong>Fecha:</strong> {documentoImprimir.data.fecha}</p>
                   </div>
@@ -1925,7 +1705,7 @@ function MainApp() {
                     <p><strong>Vendedor:</strong> {documentoImprimir.data.usuario_creador || 'Sistema'}</p>
                   </div>
 
-                  <table className="w-full text-left border border-slate-300 mt-1 text-sm">
+                  <table className="w-full text-left border border-slate-300 mt-1 text-base">
                     <thead className="bg-slate-100">
                       <tr><th className="p-1.5 border">Descripción</th><th className="p-1.5 text-center border">Cant.</th><th className="p-1.5 text-right border">Precio</th></tr>
                     </thead>
@@ -1935,31 +1715,20 @@ function MainApp() {
                       ))}
                     </tbody>
                   </table>
-                  <p className="font-black text-emerald-700 text-lg text-right mt-1">Total a Pagar: $ {(documentoImprimir.data.total || 0).toLocaleString('es-CO')}</p>
+                  <p className="font-black text-emerald-700 text-xl text-right mt-1">Total a Pagar: $ {(documentoImprimir.data.total || 0).toLocaleString('es-CO')}</p>
+
+                  <div className="mt-1.5 pt-1.5 border-t border-dashed border-slate-300 grid grid-cols-2 gap-3 text-sm">
+                    <div className="border border-slate-300 p-2 rounded h-14 flex flex-col justify-between">
+                      <span className="font-bold text-slate-600 uppercase text-xs">Garantía:</span>
+                      <div className="border-b border-dotted border-slate-400 w-full mb-1"></div>
+                      <div className="border-b border-dotted border-slate-400 w-full"></div>
+                    </div>
+                    <div className="border border-slate-300 p-2 rounded h-14 flex flex-col items-center justify-end text-center">
+                      <span className="text-xs text-slate-400 font-bold uppercase">Sello / Firma</span>
+                    </div>
+                  </div>
                 </div>
               )}
-
-              {/* ZONA DE GARANTÍA MODIFICABLE */}
-              <div className="mt-2 pt-2 border-t border-slate-300 text-[11px] leading-relaxed text-slate-700 bg-slate-50 p-2.5 rounded-lg border">
-                <p className="font-bold uppercase text-indigo-800 mb-1">
-                  Condiciones de Garantía {documentoImprimir.data.garantia_incluye && documentoImprimir.data.garantia_tiempo ? `(Tiempo: ${documentoImprimir.data.garantia_tiempo})` : '(No aplica / Sin garantía especificada)'}
-                </p>
-                <p>
-                  Para efectos de Garantía se necesita copia de la factura y la mercancía con todos los accesorios y empaques originales, no se dará garantía por daños ocasionados por alto voltaje, golpes, deterioro o desconfiguración de la máquina, software, virus o por levantar los sellos de seguridad. La garantía es directamente con el centro de servicio o en el almacén. Por ninguna excepción se hace servicio a domicilio.
-                </p>
-              </div>
-
-              <div className="mt-2 pt-1 border-t border-dashed border-slate-300 grid grid-cols-2 gap-3 text-sm">
-                <div className="border border-slate-300 p-2 rounded h-14 flex flex-col justify-between">
-                  <span className="font-bold text-slate-600 uppercase text-xs">Observaciones / Firma:</span>
-                  <div className="border-b border-dotted border-slate-400 w-full mb-1"></div>
-                  <div className="border-b border-dotted border-slate-400 w-full"></div>
-                </div>
-                <div className="border border-slate-300 p-2 rounded h-14 flex flex-col items-center justify-end text-center">
-                  <span className="text-xs text-slate-400 font-bold uppercase">Sello / Firma</span>
-                </div>
-              </div>
-
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t no-imprimir">
@@ -1971,6 +1740,7 @@ function MainApp() {
                   const nombreClienteLimpio = (doc.cliente_nombre || 'Cliente').replace(/[^a-zA-Z0-9]/g, '_');
                   const telefonoLimpio = (doc.cliente_telefono || '0000000000').replace(/[^a-zA-Z0-9]/g, '');
                   
+                  // Nombre del archivo estructurado con número, cliente y celular
                   const elHtml = document.getElementById('seccion-impresion').innerHTML;
                   const blob = new Blob([`<html><head><title>Comprobante</title><style>body{font-family:sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:8px;}</style></head><body>${elHtml}</body></html>`], { type: 'text/html' });
                   const url = URL.createObjectURL(blob);
@@ -2052,9 +1822,6 @@ function PortalPublico() {
             </div>
             <p className="text-white"><strong>Equipo:</strong> {ordenConsultaResult.tipo_equipo} {ordenConsultaResult.marca_modelo}</p>
             <p className="text-slate-300"><strong>Accesorios:</strong> {ordenConsultaResult.deja_cargador ? '🔌 Cargador ' : ''} {ordenConsultaResult.deja_bateria ? `🔋 Batería (${ordenConsultaResult.serie_bateria || 'S/N'})` : ''} {!ordenConsultaResult.deja_cargador && !ordenConsultaResult.deja_bateria ? 'Ninguno' : ''}</p>
-            {ordenConsultaResult.garantia_incluye && (
-              <p className="text-emerald-400"><strong>🛡️ Garantía:</strong> {ordenConsultaResult.garantia_tiempo || 'Incluida'}</p>
-            )}
             <p className="text-white"><strong>Fallo Reportado:</strong> {ordenConsultaResult.fallo_reportado || ordenConsultaResult.falla_reportado}</p>
             <p className="text-white"><strong>Diagnóstico Técnico:</strong> {ordenConsultaResult.diagnostico || 'Equipo en proceso de revisión.'}</p>
             
