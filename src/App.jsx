@@ -14,6 +14,7 @@ export function AppProvider({ children }) {
   const [ordenes, setOrdenes] = useState([]);
   const [facturas, setFacturas] = useState([]);
   const [compras, setCompras] = useState([]);
+  const [cotizaciones, setCotizaciones] = useState([]);
   const [usuarioSesion, setUsuarioSesion] = useState(() => {
     const saved = localStorage.getItem('techfix_sesion');
     return saved ? JSON.parse(saved) : null;
@@ -54,6 +55,9 @@ export function AppProvider({ children }) {
 
       const resComp = await supabase.from('compras').select('*').order('id', { ascending: false });
       if (resComp.data) setCompras(resComp.data);
+
+      const resCot = await supabase.from('cotizaciones').select('*').order('id', { ascending: false });
+      if (resCot.data) setCotizaciones(resCot.data);
 
     } catch (error) {
       console.error("Error conectando a Supabase:", error);
@@ -404,7 +408,7 @@ export function AppProvider({ children }) {
       clientes, agregarCliente, modificarCliente,
       ordenes, agregarOrden, actualizarOrden,
       facturas, remisionarOrden, agregarVentaDirecta, cancelarRemision,
-      compras, agregarCompra, actualizarPrecioCompra
+      compras, agregarCompra, actualizarPrecioCompra, cotizaciones, setCotizaciones
     }}>
       {children}
     </AppContext.Provider>
@@ -517,7 +521,7 @@ function MainApp() {
     empresa, clientes, ordenes, facturas, compras, agregarCompra, actualizarPrecioCompra, roles, agregarRol, actualizarRol, usuarios, agregarUsuario,
     usuarioSesion, logout, rolActual,
     agregarCliente, modificarCliente, agregarOrden, actualizarOrden,
-    remisionarOrden, agregarVentaDirecta, cancelarRemision, setEmpresa
+    remisionarOrden, agregarVentaDirecta, cancelarRemision, setEmpresa, cotizaciones, setCotizaciones
   } = useApp();
 
   const [tab, setTab] = useState('ordenes');
@@ -582,6 +586,15 @@ function MainApp() {
   const [clienteVentaSeleccionado, setClienteVentaSeleccionado] = useState(null);
   const [formNuevoClienteVenta, setFormNuevoClienteVenta] = useState({ nombre: '', telefono: '', cedula: '', email: '', direccion: '' });
   const [itemsVenta, setItemsVenta] = useState([{ descripcion: '', cantidad: 1, precio: 0 }]);
+  const [tipoClienteCot, setTipoClienteCot] = useState('EXISTENTE');
+  const [busquedaClienteCot, setBusquedaClienteCot] = useState('');
+  const [clienteCotSeleccionado, setClienteCotSeleccionado] = useState(null);
+  const [formNuevoClienteCot, setFormNuevoClienteCot] = useState({ nombre: '', telefono: '', cedula: '', email: '', direccion: '' });
+  const [tipoCotizacion, setTipoCotizacion] = useState('INDIVIDUAL');
+  const [opcionesCotizacion, setOpcionesCotizacion] = useState([[{ descripcion: '', cantidad: 1, precio: 0 }]]);
+  const [cotizacionesBusqueda, setCotizacionesBusqueda] = useState('');
+  const [cotizacionActiva, setCotizacionActiva] = useState(null);
+  const [guardandoCotizacion, setGuardandoCotizacion] = useState(false);
   const [compraSeleccionadaVentaId, setCompraSeleccionadaVentaId] = useState('');
   const [garantiaVentaAplica, setGarantiaVentaAplica] = useState(false);
   const [garantiaVentaTiempo, setGarantiaVentaTiempo] = useState('');
@@ -743,6 +756,7 @@ function MainApp() {
 
   return (
     <div className="flex min-h-screen bg-slate-950 text-slate-100 font-sans">
+      <style>{`@media print { main.no-imprimir { display: block !important; } body * { visibility: hidden !important; } #documento-cotizacion, #documento-cotizacion * { visibility: visible !important; } #documento-cotizacion { position: absolute; left: 0; top: 0; width: 100%; background: white !important; color: #111827 !important; } .no-imprimir { display: none !important; } }`}</style>
       
       {/* BARRA LATERAL */}
       <aside className="w-64 bg-slate-900 border-r border-slate-800 p-5 space-y-6 flex flex-col justify-between shrink-0 no-imprimir">
@@ -765,6 +779,7 @@ function MainApp() {
             {permisos.ver_clientes && <button onClick={() => setTab('clientes')} className={`w-full text-left p-3 rounded-xl transition ${tab === 'clientes' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800'}`}>👥 Directorio de Clientes</button>}
             {permisos.facturar && <button onClick={() => setTab('facturacion')} className={`w-full text-left p-3 rounded-xl transition ${tab === 'facturacion' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800'}`}>🧾 Remisiones y Ventas</button>}
             {permisos.facturar && <button onClick={() => setTab('compras')} className={`w-full text-left p-3 rounded-xl transition ${tab === 'compras' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800'}`}>🛒 Compras y Gastos</button>}
+            <button onClick={() => { setTab('cotizador'); setCotizacionActiva(null); }} className={`w-full text-left p-3 rounded-xl transition ${tab === 'cotizador' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800'}`}>📝 Cotizador</button>
             <button onClick={() => setTab('portal')} className={`w-full text-left p-3 rounded-xl transition ${tab === 'portal' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800'}`}>🔍 Portal Consulta Cliente</button>
             {permisos.ver_configuracion && <button onClick={() => setTab('config')} className={`w-full text-left p-3 rounded-xl transition ${tab === 'config' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800'}`}>⚙️ Configuración & Permisos</button>}
           </nav>
@@ -1206,6 +1221,46 @@ function MainApp() {
         )}
 
         {/* 5. COMPRAS Y GASTOS */}
+        {tab === 'cotizador' && (
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div><h2 className="text-2xl font-black text-white">Cotizador</h2><p className="text-xs text-slate-400 mt-1">Cotizaciones individuales o con varias alternativas para el mismo cliente.</p></div>
+              <button onClick={() => { setCotizacionActiva(null); setClienteCotSeleccionado(null); setTipoClienteCot('EXISTENTE'); setTipoCotizacion('INDIVIDUAL'); setOpcionesCotizacion([[{ descripcion: '', cantidad: 1, precio: 0 }]]); setFormNuevoClienteCot({ nombre: '', telefono: '', cedula: '', email: '', direccion: '' }); }} className="bg-indigo-600 hover:bg-indigo-500 px-4 py-2.5 rounded-xl text-xs font-bold">+ Nueva cotización</button>
+            </div>
+            {!cotizacionActiva ? (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-5">
+                <div className="flex flex-wrap gap-3 items-center">
+                  <input value={cotizacionesBusqueda} onChange={e => setCotizacionesBusqueda(e.target.value)} placeholder="Buscar por número, nombre o teléfono..." className="flex-1 min-w-64 bg-slate-800 border border-slate-700 p-3 rounded-xl text-xs" />
+                  <div className="flex gap-2"><button onClick={() => setTipoCotizacion('INDIVIDUAL')} className={`px-3 py-2 rounded-lg text-xs font-bold ${tipoCotizacion === 'INDIVIDUAL' ? 'bg-indigo-600' : 'bg-slate-800'}`}>Individual</button><button onClick={() => setTipoCotizacion('MULTIPLE')} className={`px-3 py-2 rounded-lg text-xs font-bold ${tipoCotizacion === 'MULTIPLE' ? 'bg-indigo-600' : 'bg-slate-800'}`}>Múltiple</button></div>
+                </div>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <h3 className="font-bold text-indigo-300 text-sm">Cliente</h3>
+                    <div className="flex gap-2"><button onClick={() => {setTipoClienteCot('EXISTENTE');setClienteCotSeleccionado(null);}} className={`flex-1 p-2 rounded-lg text-xs font-bold ${tipoClienteCot==='EXISTENTE'?'bg-indigo-600':'bg-slate-800'}`}>Cliente existente</button><button onClick={() => {setTipoClienteCot('NUEVO');setClienteCotSeleccionado(null);}} className={`flex-1 p-2 rounded-lg text-xs font-bold ${tipoClienteCot==='NUEVO'?'bg-indigo-600':'bg-slate-800'}`}>+ Nuevo cliente</button></div>
+                    {tipoClienteCot === 'EXISTENTE' ? <>
+                      {!clienteCotSeleccionado ? <><input value={busquedaClienteCot} onChange={e=>setBusquedaClienteCot(e.target.value)} placeholder="Buscar cliente por nombre, cédula o teléfono" className="w-full bg-slate-800 border border-slate-700 p-2.5 rounded-lg text-xs"/><div className="max-h-40 overflow-auto border border-slate-800 rounded-lg">{clientes.filter(c=>normalizarBusqueda(`${c.nombre} ${c.telefono} ${c.cedula}`).includes(normalizarBusqueda(busquedaClienteCot))).slice(0,30).map(c=><button key={c.id} onClick={()=>{setClienteCotSeleccionado(c);setBusquedaClienteCot('');}} className="block w-full text-left p-2.5 text-xs hover:bg-slate-800 border-b border-slate-800">{c.nombre} · {c.telefono || 'Sin teléfono'} {c.cedula ? `· CC ${c.cedula}` : ''}</button>)}</div></> : <div className="bg-slate-800 p-3 rounded-xl text-xs flex justify-between gap-2"><div><b>{clienteCotSeleccionado.nombre}</b><p className="text-slate-400">{clienteCotSeleccionado.telefono}</p></div><button onClick={()=>setClienteCotSeleccionado(null)} className="text-indigo-300">Cambiar</button></div>}
+                    </> : <div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><input value={formNuevoClienteCot.nombre} onChange={e=>setFormNuevoClienteCot({...formNuevoClienteCot,nombre:e.target.value})} placeholder="Nombre completo *" className="bg-slate-800 border border-slate-700 p-2.5 rounded-lg text-xs"/><input value={formNuevoClienteCot.telefono} onChange={e=>setFormNuevoClienteCot({...formNuevoClienteCot,telefono:e.target.value})} placeholder="Teléfono / WhatsApp *" className="bg-slate-800 border border-slate-700 p-2.5 rounded-lg text-xs"/><input value={formNuevoClienteCot.cedula} onChange={e=>setFormNuevoClienteCot({...formNuevoClienteCot,cedula:e.target.value})} placeholder="Cédula" className="bg-slate-800 border border-slate-700 p-2.5 rounded-lg text-xs"/><input value={formNuevoClienteCot.email} onChange={e=>setFormNuevoClienteCot({...formNuevoClienteCot,email:e.target.value})} placeholder="Correo" className="bg-slate-800 border border-slate-700 p-2.5 rounded-lg text-xs"/><input value={formNuevoClienteCot.direccion} onChange={e=>setFormNuevoClienteCot({...formNuevoClienteCot,direccion:e.target.value})} placeholder="Dirección" className="sm:col-span-2 bg-slate-800 border border-slate-700 p-2.5 rounded-lg text-xs"/></div>}
+                  </div>
+                  <div className="space-y-2"><h3 className="font-bold text-indigo-300 text-sm">Datos de cotización</h3><p className="text-xs text-slate-400">Número consecutivo independiente: lo genera el sistema al guardar. Cada opción puede contener varios productos o servicios y sus cantidades y precios.</p><label className="block text-xs text-slate-400">Vigencia (opcional)</label><input id="vigenciaCotizacion" type="date" className="bg-slate-800 border border-slate-700 p-2.5 rounded-lg text-xs"/></div>
+                </div>
+                <div className="space-y-4">
+                  {(tipoCotizacion==='INDIVIDUAL' ? opcionesCotizacion.slice(0,1) : opcionesCotizacion).map((items,oi)=><div key={oi} className="border border-slate-700 rounded-xl p-4 space-y-3"><div className="flex items-center justify-between"><h3 className="font-bold text-white">{tipoCotizacion==='MULTIPLE'?`Opción ${oi+1}`:'Detalle de cotización'}</h3><button onClick={()=>setOpcionesCotizacion(prev=>prev.map((op,i)=>i===oi? [...op,{descripcion:'',cantidad:1,precio:0}]:op))} className="text-indigo-300 text-xs font-bold">+ Agregar producto/servicio</button></div>{items.map((it,ii)=><div key={ii} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center"><input value={it.descripcion} onChange={e=>setOpcionesCotizacion(prev=>prev.map((op,i)=>i===oi?op.map((x,j)=>j===ii?{...x,descripcion:e.target.value}:x):op))} placeholder="Descripción del producto o servicio *" className="sm:col-span-6 bg-slate-800 border border-slate-700 p-2.5 rounded-lg text-xs"/><input type="number" min="1" value={it.cantidad} onChange={e=>setOpcionesCotizacion(prev=>prev.map((op,i)=>i===oi?op.map((x,j)=>j===ii?{...x,cantidad:Math.max(1,Number(e.target.value)||1)}:x):op))} placeholder="Cant." className="sm:col-span-2 bg-slate-800 border border-slate-700 p-2.5 rounded-lg text-xs"/><input type="number" min="0" value={it.precio} onChange={e=>setOpcionesCotizacion(prev=>prev.map((op,i)=>i===oi?op.map((x,j)=>j===ii?{...x,precio:Math.max(0,Number(e.target.value)||0)}:x):op))} placeholder="Precio unitario" className="sm:col-span-3 bg-slate-800 border border-slate-700 p-2.5 rounded-lg text-xs"/><button onClick={()=>setOpcionesCotizacion(prev=>prev.map((op,i)=>i===oi?op.filter((_,j)=>j!==ii).length?op.filter((_,j)=>j!==ii):[{descripcion:'',cantidad:1,precio:0}]:op))} className="sm:col-span-1 text-rose-400 text-xs">✕</button><div className="sm:col-span-12 text-right text-xs text-slate-400">Subtotal: $ {(Number(it.cantidad||0)*Number(it.precio||0)).toLocaleString('es-CO')}</div></div>)}<div className="text-right text-emerald-300 font-black">Total opción: $ {items.reduce((sum,it)=>sum+Number(it.cantidad||0)*Number(it.precio||0),0).toLocaleString('es-CO')}</div></div>)}
+                  {tipoCotizacion==='MULTIPLE' && <button onClick={()=>setOpcionesCotizacion(prev=>[...prev,[{descripcion:'',cantidad:1,precio:0}]])} className="border border-dashed border-indigo-500 text-indigo-300 rounded-xl p-3 w-full text-xs font-bold">+ Agregar otra opción a esta cotización</button>}
+                </div>
+                <div className="flex justify-end"><button disabled={guardandoCotizacion} onClick={async()=>{let cli=clienteCotSeleccionado;if(tipoClienteCot==='NUEVO'){if(!formNuevoClienteCot.nombre.trim()||!formNuevoClienteCot.telefono.trim()){alert('Ingresa nombre y teléfono del nuevo cliente.');return;}cli=await agregarCliente({nombre:formNuevoClienteCot.nombre.trim(),telefono:formNuevoClienteCot.telefono.trim(),cedula:formNuevoClienteCot.cedula.trim(),email:formNuevoClienteCot.email.trim(),direccion:formNuevoClienteCot.direccion.trim()});if(!cli)return;}if(!cli){alert('Selecciona un cliente o registra uno nuevo.');return;}const ops=(tipoCotizacion==='INDIVIDUAL' ? opcionesCotizacion.slice(0,1) : opcionesCotizacion).map((items,i)=>({nombre:`Opción ${i+1}`,items:items.filter(x=>x.descripcion.trim()).map(x=>({...x,cantidad:Number(x.cantidad)||1,precio:Number(x.precio)||0,subtotal:(Number(x.cantidad)||1)*(Number(x.precio)||0)})),total:items.filter(x=>x.descripcion.trim()).reduce((sum,x)=>sum+(Number(x.cantidad)||1)*(Number(x.precio)||0),0)}));if(ops.some(o=>!o.items.length)){alert('Cada opción debe tener al menos un producto o servicio con descripción.');return;}setGuardandoCotizacion(true);try{const maxNum=cotizaciones.reduce((m,c)=>Math.max(m,Number(String(c.numero_cotizacion||'').replace(/\D/g,''))||0),0);const numero=`COT-${String(maxNum+1).padStart(5,'0')}`;const nueva={numero_cotizacion:numero,cliente_id:cli.id,cliente_nombre:cli.nombre,cliente_telefono:cli.telefono,cliente_cedula:cli.cedula||'',cliente_email:cli.email||'',cliente_direccion:cli.direccion||'',tipo:tipoCotizacion,opciones:ops,vigencia:document.getElementById('vigenciaCotizacion')?.value||null,usuario_creador:usuarioSesion?.nombre||'Sistema',fecha:new Date().toISOString()};const {data,error}=await supabase.from('cotizaciones').insert([nueva]).select();if(error)throw error;setCotizaciones(prev=>[data[0],...prev]);setCotizacionActiva(data[0]);alert(`Cotización ${numero} guardada correctamente.`);}catch(err){console.error(err);alert('No se pudo guardar la cotización. Verifica que hayas creado la tabla cotizaciones en Supabase y sus permisos.');}finally{setGuardandoCotizacion(false);}}} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-5 py-3 rounded-xl text-xs font-black">{guardandoCotizacion?'Guardando...':'Guardar cotización'}</button></div>
+              </div>
+            ) : (
+              <div className="bg-white text-slate-900 rounded-2xl p-8 max-w-4xl mx-auto space-y-5" id="documento-cotizacion">
+                <div className="flex justify-between gap-4 border-b pb-4"><div>{empresa.logoUrl&&<img src={empresa.logoUrl} alt="Logo" className="w-20 h-20 object-contain"/>}<h2 className="text-2xl font-black">{empresa.nombre}</h2><p>{empresa.direccion} · {empresa.telefono}</p></div><div className="text-right"><h3 className="text-xl font-black">COTIZACIÓN</h3><p className="font-bold">{cotizacionActiva.numero_cotizacion}</p><p>{String(cotizacionActiva.fecha||'').slice(0,10)}</p><p>{cotizacionActiva.tipo==='MULTIPLE'?'Cotización múltiple':'Cotización individual'}</p></div></div>
+                <div><p><b>Cliente:</b> {cotizacionActiva.cliente_nombre}</p><p><b>Teléfono:</b> {cotizacionActiva.cliente_telefono}</p>{cotizacionActiva.cliente_cedula&&<p><b>Cédula:</b> {cotizacionActiva.cliente_cedula}</p>}{cotizacionActiva.vigencia&&<p><b>Vigente hasta:</b> {cotizacionActiva.vigencia}</p>}</div>
+                {(cotizacionActiva.opciones||[]).map((op,i)=><div key={i} className="border rounded-lg p-4"><h3 className="font-black text-lg mb-2">{cotizacionActiva.tipo==='MULTIPLE'?op.nombre:'Detalle de cotización'}</h3><table className="w-full text-sm border-collapse"><thead><tr className="bg-slate-100"><th className="text-left p-2 border">Descripción</th><th className="p-2 border">Cant.</th><th className="text-right p-2 border">Valor unitario</th><th className="text-right p-2 border">Subtotal</th></tr></thead><tbody>{(op.items||[]).map((it,j)=><tr key={j}><td className="p-2 border">{it.descripcion}</td><td className="p-2 border text-center">{it.cantidad}</td><td className="p-2 border text-right">$ {Number(it.precio).toLocaleString('es-CO')}</td><td className="p-2 border text-right">$ {Number(it.subtotal).toLocaleString('es-CO')}</td></tr>)}</tbody></table><p className="text-right font-black text-lg mt-3">Total: $ {Number(op.total||0).toLocaleString('es-CO')}</p></div>)}
+                <div className="flex flex-wrap justify-end gap-2 no-imprimir"><button onClick={()=>setCotizacionActiva(null)} className="bg-slate-200 px-3 py-2 rounded-lg text-xs font-bold">Volver al historial</button><button onClick={()=>window.print()} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold">Imprimir / Guardar PDF</button><button onClick={()=>{const tel=normalizarTelefonoWhatsApp(cotizacionActiva.cliente_telefono);if(!tel){alert('El cliente no tiene teléfono válido para WhatsApp.');return;}const resumen=(cotizacionActiva.opciones||[]).map((op,i)=>`${cotizacionActiva.tipo==='MULTIPLE'?op.nombre:'Total'}: $ ${Number(op.total||0).toLocaleString('es-CO')}`).join('\n');const msg=`Hola ${cotizacionActiva.cliente_nombre}, te compartimos la cotización ${cotizacionActiva.numero_cotizacion} de ${empresa.nombre}.\n${resumen}\nPuedes solicitar el documento completo por este medio.`;window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`,'_blank','noopener,noreferrer');}} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold">Enviar por WhatsApp</button></div>
+              </div>
+            )}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5"><h3 className="font-bold mb-3">Historial de cotizaciones</h3><div className="space-y-2">{cotizaciones.filter(c=>normalizarBusqueda(`${c.numero_cotizacion} ${c.cliente_nombre} ${c.cliente_telefono}`).includes(normalizarBusqueda(cotizacionesBusqueda))).map(c=><div key={c.id} className="flex flex-wrap items-center justify-between gap-3 border border-slate-800 rounded-xl p-3"><div><p className="font-bold text-sm">{c.numero_cotizacion} · {c.cliente_nombre}</p><p className="text-xs text-slate-400">{c.cliente_telefono} · {c.tipo==='MULTIPLE'?'Múltiple':'Individual'} · {String(c.fecha||c.created_at||'').slice(0,10)}</p></div><div className="flex items-center gap-2"><span className="text-emerald-300 font-bold text-xs">{(c.opciones||[]).length} opción(es)</span><button onClick={()=>setCotizacionActiva(c)} className="bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-lg text-xs">Ver / Imprimir</button></div></div>)}{cotizaciones.length===0&&<p className="text-xs text-slate-500">Aún no hay cotizaciones guardadas.</p>}</div></div>
+          </div>
+        )}
+
         {tab === 'compras' && permisos.facturar && (
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
             <div className="flex justify-between items-center gap-3 flex-wrap">
